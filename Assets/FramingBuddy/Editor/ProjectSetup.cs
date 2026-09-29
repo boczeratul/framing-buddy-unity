@@ -27,7 +27,7 @@ namespace FramingBuddy.EditorTools
         const string Materials = Root + "/Materials";
         const string Prefabs = Root + "/Prefabs";
         const string ScenePath = Root + "/Scenes/Main.unity";
-        static readonly string[] LandmarkIds = { "cks", "taipei101", "hallgrimskirkja" };
+        static readonly string[] LandmarkIds = { "cks", "taipei101", "hallgrimskirkja", "nyhavn" };
 
         [MenuItem("Framing Buddy/Setup Project")]
         public static void Run()
