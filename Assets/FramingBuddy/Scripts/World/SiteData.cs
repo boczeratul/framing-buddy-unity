@@ -69,6 +69,20 @@ namespace FramingBuddy
 
         static readonly double[,] HgMask = { { -64, -44 }, { -64, 44 }, { 40, 46 }, { 88, 46 }, { 92, 0 }, { 88, -46 }, { 40, -46 } };
 
+        // ---- 羅森堡宮：u 沿主樓長軸指向東南（129.6°），v 指向東北花園側 ----
+
+        public static readonly LatLon RosenborgAnchor = new LatLon(55.685687, 12.577433);
+        const double RbBearing = 129.6;
+
+        public static LatLon RbSite(double u, double v)
+        {
+            double su = Math.Sin(RbBearing * Geo.Deg), cu = Math.Cos(RbBearing * Geo.Deg);
+            double sv = Math.Sin((RbBearing - 90) * Geo.Deg), cv = Math.Cos((RbBearing - 90) * Geo.Deg);
+            return Geo.Offset(RosenborgAnchor, u * su + v * sv, u * cu + v * cv);
+        }
+
+        static readonly double[,] RbMask = { { -28, 22 }, { -28, -26.5 }, { -23.5, -27.6 }, { -22.5, -56 }, { 62, -56 }, { 62, -6 }, { 65, -6 }, { 65, 9 }, { 61, 9 }, { 59, 22 } };
+
         public static readonly List<LandmarkDef> Landmarks = BuildLandmarks();
 
         static List<LandmarkDef> BuildLandmarks()
@@ -79,6 +93,8 @@ namespace FramingBuddy
             for (int i = 0; i < T101Footprint.GetLength(0); i++) t101.Add(Geo.Offset(T101Anchor, T101Footprint[i, 0], T101Footprint[i, 1]));
             var hg = new List<LatLon>();
             for (int i = 0; i < HgMask.GetLength(0); i++) hg.Add(HgSite(HgMask[i, 0], HgMask[i, 1]));
+            var rb = new List<LatLon>();
+            for (int i = 0; i < RbMask.GetLength(0); i++) rb.Add(RbSite(RbMask[i, 0], RbMask[i, 1]));
             return new List<LandmarkDef>
             {
                 new LandmarkDef
@@ -96,6 +112,11 @@ namespace FramingBuddy
                     id = "hallgrimskirkja", name = "哈爾格林姆教堂", anchor = HallgrimsAnchor, radius = 120, exclusion = hg,
                     targets = new List<Target> { new Target { id = "hallgrimskirkja", label = "哈爾格林姆教堂", at = HallgrimsAnchor, topY = 74.5f, aimAt = 0.55f, radius = 30, kind = TargetKind.Landmark } },
                 },
+                new LandmarkDef
+                {
+                    id = "rosenborg", name = "羅森堡宮", anchor = RosenborgAnchor, radius = 100, exclusion = rb,
+                    targets = new List<Target> { new Target { id = "rosenborg", label = "羅森堡宮", at = RosenborgAnchor, topY = 50.6f, aimAt = 0.4f, radius = 26, kind = TargetKind.Landmark } },
+                },
             };
         }
 
@@ -108,6 +129,9 @@ namespace FramingBuddy
 
         static Preset Hg(string name, double a, double c, string aim, Action<ShotState> apply, float h = 1.6f) =>
             new Preset { group = "冰島・哈爾格林姆教堂", name = name, at = HgSite(a, c), aim = aim, apply = apply, height = h };
+
+        static Preset Rb(string name, double u, double v, Action<ShotState> apply, float h = 1.6f) =>
+            new Preset { group = "丹麥・羅森堡宮", name = name, at = RbSite(u, v), aim = "rosenborg", apply = apply, height = h };
 
         static Preset Fuji(string name, double lat, double lon, Action<ShotState> apply, float h = 1.6f) =>
             new Preset { group = "日本・富士山周邊", name = name, at = new LatLon(lat, lon), aim = "peak:富士山", apply = apply, height = h };
@@ -137,6 +161,12 @@ namespace FramingBuddy
                 Hg("廣場中軸（萊夫像後方）", 72, 0, "hallgrimskirkja", s => s.focal = 24),
                 Hg("教堂正門前", 16, 0, "hallgrimskirkja", s => { s.focal = 14; s.portrait = true; }, 1.4f),
                 Hg("Skólavörðustígur 街上（望向教堂，約略位置）", 300, 0, "hallgrimskirkja", s => { s.focal = 85; s.portrait = true; }),
+
+                Rb("國王花園草坪（東南側，大塔＋東南山牆）", 95, -45, s => s.focal = 35),
+                Rb("護城河對岸（西南，大塔倒影）", 2, -58, s => { s.focal = 16; s.portrait = true; }, 1.4f),
+                Rb("格林橋上（臥獅與門柱入鏡）", 64, 1.6, s => s.focal = 24, 1.5f),
+                Rb("前庭草坪（大塔正面）", 0, -24, s => { s.focal = 14; s.portrait = true; }),
+                Rb("玫瑰園（東北立面三座塔）", 10, 72, s => s.focal = 35),
 
                 Fuji("河口湖・大石公園（湖對岸的富士山）", 35.52329, 138.74654, s => s.focal = 35),
                 Fuji("河口湖・產屋崎（湖面倒影）", 35.51312, 138.76598, s => s.focal = 24, 1.2f),
