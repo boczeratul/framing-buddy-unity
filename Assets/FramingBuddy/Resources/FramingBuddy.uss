@@ -1,0 +1,422 @@
+/* Framing Buddy — 深色介面（與網頁版相同的配色） */
+
+:root {
+    --bg: #0f1116;
+    --panel: #161a22;
+    --panel-2: #1d222c;
+    --line: #2a303c;
+    --text: #e6e8ec;
+    --muted: #9097a4;
+    --accent: #ffb020;
+    --accent-ink: #1a1305;
+    --ok: #5fe0bf;
+    font-size: 13px;
+    color: #e6e8ec;
+}
+
+.app {
+    flex-grow: 1;
+    flex-direction: row;
+}
+
+/* ---- 左：控制區 ---- */
+
+.aside {
+    width: 400px;
+    min-width: 340px;
+    background-color: #161a22;
+    border-right-width: 1px;
+    border-right-color: #2a303c;
+    flex-direction: column;
+}
+
+.brand {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px 8px 14px;
+}
+
+.brand-title {
+    font-size: 16px;
+    -unity-font-style: bold;
+    color: #e6e8ec;
+}
+
+.brand-sub {
+    font-size: 12px;
+    color: #9097a4;
+}
+
+.seg {
+    flex-direction: row;
+}
+
+.seg > Button {
+    margin: 0;
+    border-radius: 0;
+    padding: 3px 9px;
+    background-color: #1d222c;
+    border-color: #2a303c;
+    color: #e6e8ec;
+}
+
+.seg > Button:first-child {
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+}
+
+.seg > Button:last-child {
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    border-left-width: 0;
+}
+
+.on {
+    background-color: #ffb020;
+    border-color: #ffb020;
+    color: #1a1305;
+    -unity-font-style: bold;
+}
+
+.search-row {
+    flex-direction: row;
+    padding: 0 14px 8px 14px;
+}
+
+.search-row > TextField {
+    flex-grow: 1;
+    margin: 0 6px 0 0;
+}
+
+.search-results {
+    position: absolute;
+    top: 40px;
+    left: 14px;
+    right: 14px;
+    background-color: #1d222c;
+    border-width: 1px;
+    border-color: #2a303c;
+    border-radius: 6px;
+    display: none;
+}
+
+.search-results > Button {
+    -unity-text-align: middle-left;
+    margin: 0;
+    border-width: 0;
+    border-radius: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: #e6e8ec;
+    padding: 6px 10px;
+    white-space: normal;
+}
+
+.search-results > Button:hover {
+    background-color: #2a303c;
+}
+
+.map {
+    height: 38%;
+    min-height: 240px;
+    overflow: hidden;
+    background-color: #222;
+    border-top-width: 1px;
+    border-top-color: #2a303c;
+}
+
+.map-btn {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background-color: rgba(22, 26, 34, 0.85);
+    border-color: #2a303c;
+    color: #e6e8ec;
+    font-size: 16px;
+    padding: 0;
+}
+
+.map-attrib {
+    position: absolute;
+    left: 6px;
+    bottom: 4px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.85);
+    background-color: rgba(0, 0, 0, 0.45);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.map-hint {
+    padding: 6px 14px;
+    font-size: 11px;
+    color: #9097a4;
+    border-bottom-width: 1px;
+    border-bottom-color: #2a303c;
+    white-space: normal;
+}
+
+.panel {
+    flex-grow: 1;
+}
+
+.sec {
+    border-bottom-width: 1px;
+    border-bottom-color: #2a303c;
+    margin: 0;
+}
+
+.sec > Toggle {
+    margin: 0;
+    padding: 8px 10px;
+    -unity-font-style: bold;
+}
+
+.sec > Toggle Label {
+    color: #e6e8ec;
+    -unity-font-style: bold;
+}
+
+.sec #unity-content {
+    margin-left: 0;
+    padding: 0 14px 12px 14px;
+}
+
+.ctl {
+    margin-top: 6px;
+}
+
+.row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.row > Label.lab {
+    width: 56px;
+    color: #9097a4;
+}
+
+.row > Slider {
+    flex-grow: 1;
+    margin: 0 8px 0 0;
+}
+
+.num {
+    width: 74px;
+    margin: 0;
+}
+
+.num.wide {
+    width: 92px;
+}
+
+.unit {
+    width: 26px;
+    font-size: 11px;
+    color: #9097a4;
+    margin-left: 4px;
+}
+
+.suffix {
+    margin-left: 56px;
+    margin-top: 2px;
+    font-size: 11px;
+    color: #9097a4;
+    white-space: normal;
+}
+
+.chips {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+.chips > Button {
+    margin: 0 6px 6px 0;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background-color: #1d222c;
+    border-color: #2a303c;
+    color: #e6e8ec;
+}
+
+.chips > Button:hover {
+    border-color: #3a4252;
+}
+
+.chips > Button.on {
+    background-color: #ffb020;
+    border-color: #ffb020;
+    color: #1a1305;
+}
+
+.chips.focal > Button {
+    min-width: 40px;
+}
+
+.primary {
+    background-color: #ffb020;
+    border-color: #ffb020;
+    color: #1a1305;
+    -unity-font-style: bold;
+}
+
+.row2 {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 6px;
+}
+
+.row2 > Label.lab {
+    width: 56px;
+    color: #9097a4;
+}
+
+.row2 > DropdownField,
+.row2 > TextField {
+    flex-grow: 1;
+    margin: 0 6px 0 0;
+}
+
+.row2 > Button {
+    margin: 0;
+    background-color: #1d222c;
+    border-color: #2a303c;
+    color: #e6e8ec;
+    border-radius: 5px;
+}
+
+.check {
+    margin-top: 6px;
+}
+
+.info {
+    background-color: #1d222c;
+    border-width: 1px;
+    border-color: #2a303c;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    font-size: 12px;
+    white-space: normal;
+}
+
+.help {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #9097a4;
+    white-space: normal;
+}
+
+/* 輸入框 */
+TextField > .unity-text-field__input,
+.unity-base-field__input {
+    background-color: #1d222c;
+    border-color: #2a303c;
+    color: #e6e8ec;
+    border-radius: 5px;
+}
+
+DropdownField > .unity-base-popup-field__input {
+    background-color: #1d222c;
+    border-color: #2a303c;
+    color: #e6e8ec;
+}
+
+.unity-slider__tracker {
+    background-color: #2a303c;
+    border-color: #2a303c;
+}
+
+.unity-slider__dragger {
+    background-color: #ffb020;
+    border-color: #ffb020;
+    border-radius: 7px;
+    width: 14px;
+    height: 14px;
+    margin-top: -6px;
+}
+
+.unity-toggle__checkmark {
+    background-color: #1d222c;
+    border-color: #3a4252;
+}
+
+Label {
+    color: #e6e8ec;
+}
+
+/* ---- 右：取景結果 ---- */
+
+.result {
+    flex-grow: 1;
+    flex-direction: column;
+}
+
+.viewfinder {
+    flex-grow: 1;
+}
+
+.bar {
+    position: absolute;
+    background-color: #000;
+}
+
+.overlay {
+    position: absolute;
+}
+
+.tag {
+    position: absolute;
+    font-size: 12px;
+    -unity-font-style: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.55);
+}
+
+.loading {
+    position: absolute;
+    top: 24px;
+    align-self: center;
+    padding: 4px 12px;
+    border-radius: 12px;
+    background-color: rgba(10, 12, 16, 0.72);
+    font-size: 12px;
+}
+
+.hud {
+    background-color: #000;
+    padding: 8px 16px 12px 16px;
+    border-top-width: 1px;
+    border-top-color: #1c1f26;
+}
+
+.hud-main {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.hud-main > Label {
+    margin-right: 16px;
+    color: #cfd3da;
+}
+
+.hud-big {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: #fff;
+}
+
+.hud-target {
+    margin-top: 4px;
+    color: #9097a4;
+}
+
+.hud-target.ok {
+    color: #5fe0bf;
+}

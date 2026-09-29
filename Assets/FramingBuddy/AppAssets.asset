@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 802c866e455954b799c9c5ea76ccefcb, type: 3}
+  m_Name: AppAssets
+  m_EditorClassIdentifier: Assembly-CSharp::FramingBuddy.AppAssets
+  landmarks:
+  - id: cks
+    prefab: {fileID: 4126057545707629796, guid: 39221518d81434140b0bf85a1b3442c3, type: 3}
+  - id: taipei101
+    prefab: {fileID: 5031222254627595182, guid: 76fa0d1d343b541d7809470d72e22446, type: 3}
+  - id: hallgrimskirkja
+    prefab: {fileID: 2636478899306548326, guid: cd544ee0b72514f13b4f6d698115ac1c, type: 3}
+  terrain: {fileID: 2100000, guid: 2efa762d6bc2d4600aaa72ffc1606f1a, type: 2}
+  water: {fileID: 2100000, guid: f0533a8f9118a45d880c8b2f38efe3dd, type: 2}
+  gizmo: {fileID: 2100000, guid: d111ab384e0d747ec82a61535270d5ea, type: 2}
+  nightGlow:
+  - {fileID: 2100000, guid: 57ced1852817548f18aa9683b26b09b6, type: 2}
+  - {fileID: 2100000, guid: c7a39d265a2454fefb06e66e09380692, type: 2}
+  - {fileID: 2100000, guid: f64348acb7dc240f4ad0f7baa41b7c70, type: 2}
+  - {fileID: 2100000, guid: ac2188c25721b40bcaf7aa8a0a01a3e5, type: 2}
+  - {fileID: 2100000, guid: 2e964686c95704a10a29b827206c0f39, type: 2}
+  - {fileID: 2100000, guid: 37cdcb20fff154f1f8990d5739bfc5f0, type: 2}
+  - {fileID: 2100000, guid: 630a996a0ca534549b5a383f2911d16f, type: 2}
+  - {fileID: 2100000, guid: 3df21a84844d4442fa8e0fce9d9356c3, type: 2}
+  - {fileID: 2100000, guid: b69dfad9dc9574de88fb87a346510df6, type: 2}
+  - {fileID: 2100000, guid: 02e79001dff1f4f84b44666b8acfead2, type: 2}
+  - {fileID: 2100000, guid: 5fd31b9433ad34941bd497f1960ec655, type: 2}
+  - {fileID: 2100000, guid: 465be69b8e610481cb3d4fceba0c75a9, type: 2}
+  - {fileID: 2100000, guid: 32ad4a2eb0e274488a57a19f77afdbee, type: 2}
+  - {fileID: 2100000, guid: 54c994e26aada40efb52db74a12bbb18, type: 2}
+  - {fileID: 2100000, guid: 50411bc6d877542829b87b3a0852d3cd, type: 2}
+  - {fileID: 2100000, guid: 86fd1c324fb2d4d1884a1f89e1f09329, type: 2}
+  - {fileID: 2100000, guid: 84a17969f12e0412fba976034f53ca65, type: 2}
+  styleSheet: {fileID: 7433441132597879392, guid: e2987e69e1ad1434ba8b4c2f6a1fa552, type: 3}
+  theme: {fileID: -4733365628477956816, guid: 41419660cfb7b4e008fa7f413cecec0e, type: 3}
