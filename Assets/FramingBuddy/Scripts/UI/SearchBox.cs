@@ -53,10 +53,7 @@ namespace FramingBuddy
             if (items.Count == 0)
             {
                 var l = new Label(empty ?? "查無結果");
-                l.style.paddingLeft = 10;
-                l.style.paddingTop = 6;
-                l.style.paddingBottom = 6;
-                l.style.color = new Color(0.56f, 0.59f, 0.64f);
+                l.AddToClassList("search-empty");
                 Results.Add(l);
             }
             foreach (var it in items)
@@ -74,8 +71,7 @@ namespace FramingBuddy
                 Results.Add(b);
             }
             var close = new Button(Hide) { text = "關閉" };
-            close.style.unityTextAlign = TextAnchor.MiddleCenter;
-            close.style.color = new Color(0.56f, 0.59f, 0.64f);
+            close.AddToClassList("search-close");
             Results.Add(close);
             Results.style.display = DisplayStyle.Flex;
             Results.BringToFront();
