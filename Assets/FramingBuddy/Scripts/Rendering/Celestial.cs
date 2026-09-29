@@ -105,9 +105,8 @@ namespace FramingBuddy
             _exposure.mode.Override(ExposureMode.AutomaticHistogram);
             _exposure.limitMin.Override(-7f);
             _exposure.limitMax.Override(17f);
-            _exposure.adaptationMode.Override(AdaptationMode.Progressive);
-            _exposure.adaptationSpeedDarkToLight.Override(4f);
-            _exposure.adaptationSpeedLightToDark.Override(2.5f);
+            // 規劃工具：測光立即反應（像相機的測光表），不做人眼式的漸進適應
+            _exposure.adaptationMode.Override(AdaptationMode.Fixed);
             _exposure.targetMidGray.Override(TargetMidGray.Grey125);
             _masks = BuildMeterMasks();
 
@@ -133,7 +132,10 @@ namespace FramingBuddy
             _tone = _profile.Add<Tonemapping>(true);
             _tone.mode.Override(TonemappingMode.ACES);
             _flare = _profile.Add<ScreenSpaceLensFlare>(true);
-            _flare.intensity.Override(0.25f);
+            // 鏡頭眩光保持含蓄：不要大圓環
+            _flare.intensity.Override(0.12f);
+            _flare.warpedFlareIntensity.Override(0f);
+            _flare.secondaryFlareIntensity.Override(0.6f);
             _vignette = _profile.Add<Vignette>(true);
             _vignette.intensity.Override(0.12f);
             _vignette.smoothness.Override(0.6f);
@@ -159,6 +161,9 @@ namespace FramingBuddy
             _sunHd.flareMultiplier = 1f;
             _sunHd.normalBias = 0.75f;
             RenderSettings.sun = _sun;
+            // AddHDLight 先以預設的點光源註冊、之後才改成平行光：重新啟用讓 HDRP 登錄為平行光（天空才會被照亮）
+            sunGo.SetActive(false);
+            sunGo.SetActive(true);
 
             // 月亮：反射太陽光（HDRP 依太陽方向算繪月相）
             var moonGo = new GameObject("Moon");
@@ -178,6 +183,8 @@ namespace FramingBuddy
             _moonHd.EnableShadows(false);
             _moonHd.SetShadowResolutionOverride(true);
             _moonHd.SetShadowResolution(2048);
+            moonGo.SetActive(false);
+            moonGo.SetActive(true);
 
             if (assets != null) _glow.AddRange(assets.nightGlow);
             _ = LoadStars();
@@ -186,7 +193,7 @@ namespace FramingBuddy
         async System.Threading.Tasks.Task LoadStars()
         {
             _stars = await StarField.Build(1024);
-            if (_sky != null) _sky.spaceEmissionTexture.Override(_stars);
+            if (_sky != null && !noStars) _sky.spaceEmissionTexture.Override(_stars);
         }
 
         // ---- 測光遮罩 ----
@@ -232,15 +239,18 @@ namespace FramingBuddy
             _contact.quality.Override(lvl);
             _ssao.quality.Override(lvl);
             _ssr.quality.Override(lvl);
-            _ssgi.enable.Override(q >= Quality.High);
+            // 螢幕空間全域光照約 5 ms：只在極致畫質（M5 Pro／Max）開啟
+            _ssgi.enable.Override(q >= Quality.Ultra);
             _ssgi.quality.Override(Mathf.Min(lvl, 1));
-            _fog.enableVolumetricFog.Override(q >= Quality.Medium);
-            _fog.quality.Override(lvl);
-            _clouds.numPrimarySteps.Override(q switch { Quality.Low => 32, Quality.Medium => 48, Quality.High => 64, _ => 96 });
-            _clouds.numLightSteps.Override(q switch { Quality.Low => 4, Quality.Medium => 6, _ => 8 });
-            _clouds.cloudSimpleMode.Override(q >= Quality.High ? VolumetricClouds.CloudSimpleMode.Quality : VolumetricClouds.CloudSimpleMode.Performance);
-            _clouds.microErosion.Override(q >= Quality.High);
-            _dof.quality.Override(q >= Quality.High ? 2 : 1);
+            // 體積霧（光束）：高畫質用中等品質，極致才用高品質
+            _fog.enableVolumetricFog.Override(q >= Quality.High);
+            _fog.quality.Override(q >= Quality.Ultra ? 2 : q >= Quality.High ? 1 : 0);
+            _clouds.numPrimarySteps.Override(q switch { Quality.Low => 32, Quality.Medium => 40, Quality.High => 48, _ => 80 });
+            _clouds.numLightSteps.Override(q switch { Quality.Low => 4, Quality.Medium => 5, Quality.High => 6, _ => 8 });
+            _clouds.cloudSimpleMode.Override(q >= Quality.Ultra ? VolumetricClouds.CloudSimpleMode.Quality : VolumetricClouds.CloudSimpleMode.Performance);
+            _clouds.microErosion.Override(q >= Quality.Ultra);
+            // 景深的高品質（物理式、大量取樣）在 M 系列 GPU 上要 80 ms 以上：最高用中等品質
+            _dof.quality.Override(q >= Quality.Medium ? 1 : 0);
             _bloom.quality.Override(lvl);
         }
 
@@ -252,8 +262,7 @@ namespace FramingBuddy
         {
             _originEle = originEle;
             if (changed.Contains("quality")) ApplyQuality(s.quality);
-            // 地球中心（公尺）：海平面在 y = −海拔
-            _env.planetCenter.Override(new Vector3(0, -(6378100f + originEle), 0));
+            SetOriginElevation(originEle);
 
             var utc = TimeUtil.ZonedToUtc(s.date, s.minutes, s.tz);
             var loc = s.CameraLatLon;
@@ -299,10 +308,12 @@ namespace FramingBuddy
             // 雲
             float c = s.clouds;
             _clouds.enable.Override(c > 0.02f);
-            _clouds.shapeFactor.Override(Mathf.Lerp(0.97f, 0.32f, Mathf.Pow(c, 0.8f)));
-            _clouds.densityMultiplier.Override(Mathf.Lerp(0.3f, 0.5f, c));
+            // 覆蓋率：HDRP 的 shapeFactor 越低雲越多（稀疏 0.95、多雲 0.9、陰天 0.5）
+            float shape = c <= 0.5f ? Mathf.Lerp(0.985f, 0.9f, c / 0.5f) : Mathf.Lerp(0.9f, 0.45f, (c - 0.5f) / 0.5f);
+            _clouds.shapeFactor.Override(shape);
+            _clouds.densityMultiplier.Override(Mathf.Lerp(0.32f, 0.45f, c));
             _clouds.shapeScale.Override(5f);
-            _clouds.erosionFactor.Override(Mathf.Lerp(0.85f, 0.55f, c));
+            _clouds.erosionFactor.Override(Mathf.Lerp(0.85f, 0.6f, c));
             _clouds.erosionScale.Override(107f);
             float bottom = Mathf.Max(1300f, originEle + 900f) - c * 400f;
             _clouds.bottomAltitude.Override(bottom);
@@ -326,16 +337,71 @@ namespace FramingBuddy
             EstimatedEv100 = EstimateEv100(sun.altitude, moon.altitude, illum.fraction, c);
         }
 
+        /// <summary>除錯：強制固定曝光（EV100）</summary>
+        public float? ForceFixedExposure;
+
+        /// <summary>除錯：改用漸層天空／關閉月光</summary>
+        public bool noStars;
+
+        public void DebugSkySpace(bool camera, bool noAtmo)
+        {
+            if (camera) _env.renderingSpace.Override(RenderingSpace.Camera);
+            if (noAtmo) _sky.atmosphericScattering.Override(false);
+        }
+
+        public void DisableComponents(string csv)
+        {
+            foreach (var name in csv.Split(','))
+                foreach (var c in _profile.components)
+                    if (c.GetType().Name == name.Trim()) c.active = false;
+        }
+
+        public void DebugSky(bool gradient, bool noMoon, bool noVolume, bool noStarsFlag)
+        {
+            noStars = noStarsFlag;
+            if (noStars) _sky.spaceEmissionTexture.Override(null);
+            if (noVolume) _volume.gameObject.SetActive(false);
+            if (gradient)
+            {
+                var g = _profile.Add<GradientSky>(true);
+                g.top.Override(new Color(0.2f, 0.4f, 1f) * 3000);
+                g.middle.Override(new Color(0.6f, 0.7f, 1f) * 3000);
+                g.bottom.Override(new Color(0.3f, 0.3f, 0.3f) * 3000);
+                g.skyIntensityMode.Override(SkyIntensityMode.Multiplier);
+                _env.skyType.Override((int)SkyType.Gradient);
+            }
+            if (noMoon) _moon.gameObject.SetActive(false);
+        }
+
+        public string DebugStack(Camera cam)
+        {
+            var hd = HDCamera.GetOrCreate(cam);
+            var st = hd.volumeStack;
+            var e = st.GetComponent<Exposure>();
+            var f = st.GetComponent<Fog>();
+            var sky = st.GetComponent<VisualEnvironment>();
+            return $"profile exposure {_exposure.mode.value}/{_exposure.mode.overrideState} fixed {_exposure.fixedExposure.value}; volume active {_volume.isActiveAndEnabled} prio {_volume.priority}; stack exposure {e.mode.value}/{e.meteringMode.value} limit {e.limitMin.value}..{e.limitMax.value} comp {e.compensation.value} fixed {e.fixedExposure.value}; " +
+                   $"planet r {sky.planetRadius.value} c {sky.planetCenter.value} space {sky.renderingSpace.value} mode {sky.centerMode.value} (profile r {_env.planetRadius.value} c {_env.planetCenter.value}); cam {cam.transform.position}; " +
+                   $"fog {f.enabled.value} mfp {f.meanFreePath.value:0} base {f.baseHeight.value:0} max {f.maximumHeight.value:0}; sky {sky.skyType.value}; " +
+                   $"sun {_sun.intensity} lux {_sun.lightUnit}; ev100 est {EstimatedEv100:0.0}; profile comps {_profile.components.Count}";
+        }
+
         void ApplyMetering(ShotState s)
         {
+            if (ForceFixedExposure.HasValue)
+            {
+                _exposure.mode.Override(ExposureMode.Fixed);
+                _exposure.fixedExposure.Override(ForceFixedExposure.Value);
+                return;
+            }
             switch (s.metering)
             {
                 case MeteringMode.Multi:
                     _exposure.mode.Override(ExposureMode.AutomaticHistogram);
                     _exposure.meteringMode.Override(UnityEngine.Rendering.HighDefinition.MeteringMode.MaskWeighted);
                     _exposure.weightTextureMask.Override(_masks[0]);
-                    // 排除最暗 35% 與最亮 3%（太陽、鏡面反光）
-                    _exposure.histogramPercentages.Override(new Vector2(35f, 97f));
+                    // 排除最暗 45% 與最亮 2%（太陽、鏡面反光）：偏重亮部，夜景燈光不會整片過曝
+                    _exposure.histogramPercentages.Override(new Vector2(45f, 98f));
                     break;
                 case MeteringMode.CenterWeighted:
                     _exposure.mode.Override(ExposureMode.Automatic);
@@ -360,6 +426,14 @@ namespace FramingBuddy
             _ => "平均",
         };
 
+        /// <summary>地球半徑與中心（HDRP 17 以公里為單位）：海平面在 y = −原點海拔，大氣密度隨真實海拔變化</summary>
+        public void SetOriginElevation(float originEle)
+        {
+            _originEle = originEle;
+            _env.planetRadius.Override(6378.1f);
+            _env.planetCenter.Override(new Vector3(0, -(6378.1f + originEle / 1000f), 0));
+        }
+
         /// <summary>高度霧以相機高度為基準（能見度定義在相機所在高度）</summary>
         public void SetEye(Vector3 eye)
         {
@@ -376,14 +450,20 @@ namespace FramingBuddy
         }
 
         /// <summary>夜間燈光：地標材質的發光強度隨天色調整</summary>
+        float _glowLevel = -1;
+
         public void UpdateNightGlow()
         {
             float n = Mathf.SmoothStep(0, 1, Mathf.Clamp01(((float)-Info.sunAlt + 2f) / 8f));
+            if (Mathf.Abs(n - _glowLevel) < 0.02f) return;
+            _glowLevel = n;
             foreach (var m in _glow)
             {
                 if (m == null) continue;
                 var baseColor = m.HasProperty("_EmissiveColorLDR") ? m.GetColor("_EmissiveColorLDR") : new Color(1f, 0.82f, 0.55f);
-                HdrpMaterials.SetEmissive(m, baseColor, 40f * n);
+                // 室內亮燈的窗約 20–60 nits；地標泛光照明的牆面約 3–8 nits
+                float nits = m.name.StartsWith("Facade") ? 30f : m.name.ToLowerInvariant().Contains("glass") ? 12f : 1.5f;
+                HdrpMaterials.SetEmissive(m, baseColor, nits * n);
             }
         }
 

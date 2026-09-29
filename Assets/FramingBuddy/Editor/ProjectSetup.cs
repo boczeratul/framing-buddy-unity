@@ -59,10 +59,12 @@ namespace FramingBuddy.EditorTools
             PlayerSettings.macRetinaSupport = true;
             PlayerSettings.defaultScreenWidth = 1600;
             PlayerSettings.defaultScreenHeight = 1000;
-            PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
+            PlayerSettings.defaultIsNativeResolution = true;
+            PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;
             PlayerSettings.resizableWindow = true;
             PlayerSettings.runInBackground = false;
             PlayerSettings.gpuSkinning = true;
+            PlayerSettings.enableFrameTimingStats = true;
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.IL2CPP);
             PlayerSettings.SetApiCompatibilityLevel(NamedBuildTarget.Standalone, ApiCompatibilityLevel.NET_Standard);
             PlayerSettings.stripEngineCode = false;
@@ -143,7 +145,7 @@ namespace FramingBuddy.EditorTools
             {
                 QualitySettings.SetQualityLevel(i, false);
                 QualitySettings.renderPipeline = asset;
-                QualitySettings.vSyncCount = 1;
+                QualitySettings.vSyncCount = 0;
                 QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
             }
             QualitySettings.SetQualityLevel(Math.Max(current, QualitySettings.names.Length - 1), false);
@@ -318,6 +320,130 @@ namespace FramingBuddy.EditorTools
             return prefab;
         }
 
+        // ---- 程序化貼圖（OSM 建物立面） ----
+
+        static Texture2D SaveTexture(string path, int size, Func<int, int, Color> px, bool srgb, bool normal = false)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, !srgb);
+            var data = new Color[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                    data[y * size + x] = px(x, y);
+            tex.SetPixels(data);
+            tex.Apply();
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            var imp = (TextureImporter)AssetImporter.GetAtPath(path);
+            imp.textureType = normal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+            imp.sRGBTexture = srgb;
+            imp.wrapMode = TextureWrapMode.Repeat;
+            imp.anisoLevel = 8;
+            imp.mipmapEnabled = true;
+            imp.maxTextureSize = 2048;
+            imp.textureCompression = TextureImporterCompression.CompressedHQ;
+            imp.SaveAndReimport();
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        static float Hash(int x, int y, int s)
+        {
+            unchecked
+            {
+                uint h = (uint)(x * 374761393 + y * 668265263 + s * 1274126177);
+                h = (h ^ (h >> 13)) * 1274126177;
+                return (h ^ (h >> 16)) / 4294967295f;
+            }
+        }
+
+        /// <summary>
+        /// 立面圖集：8×8 個「柱距 3.5 m × 樓高 3.2 m」格，每格一扇窗（窗框、玻璃、窗台），格與格之間有細微變化；
+        /// 遮罩圖（金屬度、遮蔽、光滑度）讓玻璃反光、牆面粗糙；發光圖為夜間隨機亮燈的窗。
+        /// </summary>
+        static void CreateFacades(AppAssets a)
+        {
+            const int N = 1024, B = 128;
+            string dir = Root + "/Textures";
+            // 窗在格內的位置（v 由下往上）
+            bool Win(float u, float v) => u > 0.14f && u < 0.86f && v > 0.24f && v < 0.84f;
+            bool Frame(float u, float v) => Win(u, v) && (u < 0.17f || u > 0.83f || v < 0.27f || v > 0.81f || Mathf.Abs(u - 0.5f) < 0.015f);
+            var albedo = SaveTexture(dir + "/FacadeAlbedo.png", N, (x, y) =>
+            {
+                int bx = x / B, by = y / B;
+                float u = (x % B + 0.5f) / B, v = (y % B + 0.5f) / B;
+                float n = Hash(x / 4, y / 4, 1) * 0.05f;
+                if (Frame(u, v)) return new Color(0.36f, 0.37f, 0.38f);
+                if (Win(u, v))
+                {
+                    float g = 0.1f + 0.05f * v + Hash(bx, by, 2) * 0.04f;
+                    return new Color(g * 0.85f, g, g * 1.1f);
+                }
+                // 窗台
+                if (v > 0.2f && v < 0.24f && u > 0.1f && u < 0.9f) return new Color(0.7f, 0.7f, 0.68f);
+                float w = 0.82f + n + (Hash(bx, by, 3) - 0.5f) * 0.03f - (v < 0.04f ? 0.08f : 0);
+                return new Color(w, w, w * 0.98f);
+            }, true);
+            var mask = SaveTexture(dir + "/FacadeMask.png", N, (x, y) =>
+            {
+                float u = (x % B + 0.5f) / B, v = (y % B + 0.5f) / B;
+                // R 金屬度、G 遮蔽、B 細節遮罩、A 光滑度
+                if (Frame(u, v)) return new Color(0.6f, 0.9f, 0, 0.55f);
+                if (Win(u, v)) return new Color(0.15f, v > 0.78f ? 0.6f : 1f, 0, 0.94f);
+                return new Color(0, 1, 0, 0.18f + Hash(x / 8, y / 8, 4) * 0.08f);
+            }, false);
+            var emissive = SaveTexture(dir + "/FacadeEmissive.png", N, (x, y) =>
+            {
+                int bx = x / B, by = y / B;
+                float u = (x % B + 0.5f) / B, v = (y % B + 0.5f) / B;
+                if (!Win(u, v) || Frame(u, v)) return Color.black;
+                float r = Hash(bx, by, 5);
+                if (r < 0.62f) return Color.black;
+                float k = 0.45f + (r - 0.62f) * 1.4f;
+                // 暖白（住宅）與冷白（辦公）
+                return Hash(bx, by, 6) < 0.6f ? new Color(1f, 0.82f, 0.58f) * k : new Color(0.85f, 0.9f, 1f) * k;
+            }, true);
+            var roofTex = SaveTexture(dir + "/RoofAlbedo.png", 512, (x, y) =>
+            {
+                float n = Hash(x / 3, y / 3, 7) * 0.08f + Hash(x / 24, y / 24, 8) * 0.06f;
+                float g = 0.52f + n;
+                return new Color(g, g * 0.99f, g * 0.96f);
+            }, true);
+
+            var tints = new[]
+            {
+                new Color(0.9f, 0.89f, 0.85f),  // 淺色混凝土
+                new Color(0.88f, 0.8f, 0.68f),  // 米色
+                new Color(0.66f, 0.7f, 0.74f),  // 冷灰
+                new Color(0.42f, 0.43f, 0.45f), // 深灰
+            };
+            a.facades = new List<Material>();
+            for (int i = 0; i < tints.Length; i++)
+            {
+                var m = NewLit("Facade" + i);
+                m.SetTexture("_BaseColorMap", albedo);
+                m.SetColor("_BaseColor", tints[i]);
+                m.SetTexture("_MaskMap", mask);
+                m.EnableKeyword("_MASKMAP");
+                m.SetFloat("_MetallicRemapMax", 1);
+                m.SetFloat("_SmoothnessRemapMax", 1);
+                m.SetTexture("_EmissiveColorMap", emissive);
+                HDMaterial.SetUseEmissiveIntensity(m, true);
+                m.SetColor("_EmissiveColorLDR", Color.white);
+                HDMaterial.SetEmissiveIntensity(m, 0, EmissiveIntensityUnit.Nits);
+                HDMaterial.ValidateMaterial(m);
+                a.facades.Add(SaveMaterial(m, $"{Materials}/Facade{i}.mat"));
+            }
+            var roof = NewLit("Roof");
+            roof.SetTexture("_BaseColorMap", roofTex);
+            roof.SetTexture("_NormalMap", flatNormalCache);
+            roof.SetFloat("_Smoothness", 0.22f);
+            HDMaterial.ValidateMaterial(roof);
+            a.roof = SaveMaterial(roof, Materials + "/Roof.mat");
+        }
+
+        static Texture2D flatNormalCache => AssetDatabase.LoadAssetAtPath<Texture2D>(Root + "/Textures/FlatNormal.png");
+
         static AppAssets CreateAppAssets()
         {
             string path = Root + "/AppAssets.asset";
@@ -328,13 +454,45 @@ namespace FramingBuddy.EditorTools
                 AssetDatabase.CreateAsset(a, path);
             }
 
+            // 範本材質需先啟用執行時會用到的關鍵字（顏色貼圖＋法線圖），建置時才不會被剔除
+            var flatNormal = SaveTexture(Root + "/Textures/FlatNormal.png", 4, (x, y) => new Color(0.5f, 0.5f, 1f), false, true);
+            var white = SaveTexture(Root + "/Textures/White.png", 4, (x, y) => Color.white, true);
             var terrain = NewLit("Terrain");
+            terrain.SetTexture("_BaseColorMap", white);
+            terrain.SetTexture("_NormalMap", flatNormal);
+            terrain.EnableKeyword("_NORMALMAP");
+            terrain.EnableKeyword("_NORMALMAP_TANGENT_SPACE");
             terrain.SetFloat("_Smoothness", 0.1f);
+            HDMaterial.ValidateMaterial(terrain);
             a.terrain = SaveMaterial(terrain, Materials + "/Terrain.mat");
+            CreateFacades(a);
 
+            // 水面：深色、非常光滑，細微波紋的法線圖讓倒影略為破碎（像真實湖面）
+            var ripple = SaveTexture(Root + "/Textures/WaterRipples.png", 512, (x, y) =>
+            {
+                float H(float px, float py)
+                {
+                    float h = 0;
+                    for (int o = 0; o < 4; o++)
+                    {
+                        float f = 4 << o;
+                        h += Mathf.Sin((px * f + Mathf.Sin(py * f * 0.37f + o) * 1.7f) * Mathf.PI * 2 / 512f * 1f) *
+                             Mathf.Cos((py * f * 0.8f + Mathf.Cos(px * f * 0.23f + o * 2) * 1.3f) * Mathf.PI * 2 / 512f) / (o + 1);
+                    }
+                    return h;
+                }
+                float dx = H(x + 1, y) - H(x - 1, y), dy = H(x, y + 1) - H(x, y - 1);
+                var n = new Vector3(-dx * 1.5f, -dy * 1.5f, 1).normalized;
+                return new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1);
+            }, false, true);
             var water = NewLit("Water");
-            water.SetColor("_BaseColor", new Color(0.03f, 0.08f, 0.1f));
-            water.SetFloat("_Smoothness", 0.95f);
+            water.SetColor("_BaseColor", new Color(0.018f, 0.035f, 0.04f));
+            water.SetFloat("_Smoothness", 0.97f);
+            water.SetTexture("_NormalMap", ripple);
+            water.SetFloat("_NormalScale", 0.12f);
+            water.EnableKeyword("_NORMALMAP");
+            water.EnableKeyword("_NORMALMAP_TANGENT_SPACE");
+            HDMaterial.ValidateMaterial(water);
             a.water = SaveMaterial(water, Materials + "/Water.mat");
 
             var gizmo = new Material(Shader.Find("HDRP/Unlit")) { name = "Gizmo" };
@@ -353,6 +511,7 @@ namespace FramingBuddy.EditorTools
                 var p = ConvertLandmark(id, glow);
                 if (p != null) a.landmarks.Add(new AppAssets.LandmarkPrefab { id = id, prefab = p });
             }
+            glow.AddRange(a.facades);
             a.nightGlow = glow;
             a.styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(Root + "/Resources/FramingBuddy.uss");
             a.theme = AssetDatabase.LoadAssetAtPath<ThemeStyleSheet>(Root + "/Resources/FramingBuddyTheme.tss");
@@ -391,6 +550,28 @@ namespace FramingBuddy.EditorTools
         }
 
         // ---- 建置 ----
+
+        public static void SetupAndBuildDev()
+        {
+            Run();
+            BuildDev();
+        }
+
+        /// <summary>效能分析用：IL2CPP 開發版（可錄製 Profiler）</summary>
+        public static void BuildProfile()
+        {
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.IL2CPP);
+            var opts = new BuildPlayerOptions
+            {
+                scenes = new[] { ScenePath },
+                locationPathName = "Builds/profile/Framing Buddy.app",
+                target = BuildTarget.StandaloneOSX,
+                options = BuildOptions.Development,
+            };
+            var report = BuildPipeline.BuildPlayer(opts);
+            Debug.Log($"[build] {report.summary.result}");
+            EditorApplication.Exit(report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded ? 0 : 1);
+        }
 
         /// <summary>開發用：Mono 後端，建置較快</summary>
         public static void BuildDev()

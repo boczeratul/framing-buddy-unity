@@ -23,6 +23,7 @@ namespace FramingBuddy
         int _w = 16, _h = 16;
         float _scale = 100f, _minScale = 67f;
         float _avgFrame = 1f / 60f;
+        readonly FrameTiming[] _timings = new FrameTiming[1];
         float _afTimer;
         float _afTarget = 1000;
         bool _capturing;
@@ -61,7 +62,8 @@ namespace FramingBuddy
 
         public void SetQuality(Quality q)
         {
-            _minScale = q switch { Quality.Low => 50f, Quality.Medium => 58f, Quality.High => 67f, _ => 77f };
+            _minScale = q switch { Quality.Low => 40f, Quality.Medium => 45f, Quality.High => 50f, _ => 60f };
+            PixelFactor = q switch { Quality.Low => 0.6f, Quality.Medium => 0.72f, Quality.High => 0.85f, _ => 1f };
             _hd.TAAQuality = q >= Quality.High ? HDAdditionalCameraData.TAAQualityLevel.High : HDAdditionalCameraData.TAAQualityLevel.Medium;
             _scale = Mathf.Clamp(_scale, _minScale, 100f);
         }
@@ -108,13 +110,25 @@ namespace FramingBuddy
         void LateUpdate()
         {
             if (Cam == null) return;
-            // 動態解析度：以平滑後的影格時間維持約 60 fps
+            // 動態解析度：依 GPU 時間（沒有時用影格時間）維持約 60 fps
             float dt = Time.unscaledDeltaTime;
-            _avgFrame = Mathf.Lerp(_avgFrame, dt, 0.08f);
+            float gpu = -1;
+            FrameTimingManager.CaptureFrameTimings();
+            if (FrameTimingManager.GetLatestTimings(1, _timings) > 0)
+            {
+                CpuMs = Mathf.Lerp(CpuMs, (float)_timings[0].cpuFrameTime, 0.05f);
+                if (_timings[0].gpuFrameTime > 0)
+                {
+                    gpu = (float)_timings[0].gpuFrameTime / 1000f;
+                    GpuMs = Mathf.Lerp(GpuMs, (float)_timings[0].gpuFrameTime, 0.05f);
+                }
+            }
+            _avgFrame = Mathf.Lerp(_avgFrame, gpu > 0 ? gpu : dt, 0.08f);
             if (!_capturing)
             {
-                if (_avgFrame > 1f / 52f) _scale = Mathf.Max(_minScale, _scale - 2.5f);
-                else if (_avgFrame < 1f / 66f) _scale = Mathf.Min(100f, _scale + 1f);
+                float hi = gpu > 0 ? 1f / 68f : 1f / 52f, lo = gpu > 0 ? 1f / 90f : 1f / 66f;
+                if (_avgFrame > hi) _scale = Mathf.Max(_minScale, _scale - 1.5f);
+                else if (_avgFrame < lo) _scale = Mathf.Min(100f, _scale + 0.5f);
             }
             else _scale = 100f;
             Cam.focusDistance = FocusDistance = Mathf.Lerp(FocusDistance, _afTarget, 1f - Mathf.Exp(-dt * 8f));
@@ -134,6 +148,11 @@ namespace FramingBuddy
         }
 
         public float RenderScale => _scale;
+        public float CpuMs { get; private set; }
+        public float GpuMs { get; private set; }
+
+        /// <summary>取景框貼圖相對螢幕像素的比例（Retina 螢幕上略低於原生解析度可省下大量後製成本）</summary>
+        public float PixelFactor { get; private set; } = 0.85f;
 
         // ---- 匯出 ----
 

@@ -47,6 +47,9 @@ namespace FramingBuddy
         readonly Dictionary<string, GameObject> _polygonObjs = new();
         readonly List<Mountain> _mountains = new();
         GameObject _fallbackTerrain;
+        OsmBuildings _osm;
+        WaterBodies _water;
+        float _osmAt;
         int _rebaseToken;
         int _month = 9;
         bool _photoreal = true;
@@ -91,7 +94,14 @@ namespace FramingBuddy
             georef.originPlacement = CesiumGeoreferenceOriginPlacement.CartographicOrigin;
             Cesium3DTileset.OnCesium3DTilesetLoadFailure += OnTilesetFailure;
             CreateTileset();
+            _osm = new OsmBuildings(this, georef.transform);
+            _water = new WaterBodies(this, georef.transform);
         }
+
+        public WaterBodies Water => _water;
+
+        /// <summary>OSM 建物備援的狀態（近景、遠景圖磚）</summary>
+        public OsmBuildings Osm => _osm;
 
         void OnDestroy() => Cesium3DTileset.OnCesium3DTilesetLoadFailure -= OnTilesetFailure;
 
@@ -152,7 +162,7 @@ namespace FramingBuddy
             bool retile = false;
             if (changed.Contains("photoreal")) { _photoreal = s.photoreal; ApplyVisibility(); version++; }
             if (changed.Contains("relight") && _relight != s.relight) { _relight = s.relight; retile = true; }
-            if (changed.Contains("quality")) { _quality = s.quality; ApplyTilesetQuality(); }
+            if (changed.Contains("quality")) { _quality = s.quality; ApplyTilesetQuality(); _water?.SetQuality(_quality); }
             if (changed.Contains("trees")) { _trees = s.trees; foreach (var p in _placed.Values) if (p.trees) p.trees.SetActive(_trees); }
             if (changed.Contains("date"))
             {
@@ -179,6 +189,7 @@ namespace FramingBuddy
             bool g = GoogleActive;
             if (tileset != null) tileset.gameObject.SetActive(_photoreal && !googleFailed);
             if (_fallbackTerrain) _fallbackTerrain.SetActive(!g);
+            _osm?.SetVisible(!g);
         }
 
         // ---- 原點 --------------------------------------------------------------------------------
@@ -193,6 +204,8 @@ namespace FramingBuddy
             foreach (var p in _placed.Values) Destroy(p.root);
             _placed.Clear();
             ClearMountains();
+            _osm?.Rebase();
+            _water?.Clear();
             try
             {
                 _originGrid = await HeightGrid.Fetch(origin, 6000, 50, 12);
@@ -318,6 +331,12 @@ namespace FramingBuddy
         {
             _eye = Geo.ToLatLon(eyeUnity.x, -eyeUnity.z);
             if (terrainReady && !rebasing) UpdateLandmarks();
+            _water?.Update(_eye, eyeUnity);
+            if (Time.time > _osmAt)
+            {
+                _osmAt = Time.time + 1f;
+                _osm?.Update(_eye, _near, _range, !GoogleActive);
+            }
         }
 
         // ---- 地標（自建精細模型） --------------------------------------------------------------
@@ -470,6 +489,8 @@ namespace FramingBuddy
             {
                 foreach (var p in _placed.Values) want.Add(("lm:" + p.def.id, p.def.anchor, p.def.exclusion));
                 foreach (var m in _mountains) want.Add(("mt:" + m.peak.name, m.peak.at, m.mask));
+                if (_water != null)
+                    foreach (var b in _water.Bodies) want.Add(("wt:" + b.id + ":" + b.ring.Count, b.center, b.ring));
             }
             var keys = want.Select(w => w.key).ToList();
             if (keys.SequenceEqual(_clipKeys)) return;
@@ -680,6 +701,56 @@ namespace FramingBuddy
                 inner = r.half;
                 version++;
             }
+            ApplyWaterToTerrain();
+        }
+
+        /// <summary>
+        /// 沒有 Google 時：DEM 地形在湖泊範圍內壓到水面以下（DEM 的湖面常有數公尺的雜訊，會從水面冒出來）。
+        /// </summary>
+        public void ApplyWaterToTerrain()
+        {
+            if (!_fallbackTerrain || _water == null || _water.Bodies.Count == 0) return;
+            var polys = _water.Bodies.Select(b => (b, pts: b.ring.Select(p => Geo.ToLocal(p)).Select(l => new Vector2((float)l.x, -(float)l.y)).ToArray())).ToList();
+            foreach (var mf in _fallbackTerrain.GetComponentsInChildren<MeshFilter>())
+            {
+                var mesh = mf.sharedMesh;
+                if (mesh == null || !mesh.isReadable) continue;
+                var v = mesh.vertices;
+                var t = mf.transform;
+                bool changed = false;
+                foreach (var (b, pts) in polys)
+                {
+                    var bb = b.bounds;
+                    for (int i = 0; i < v.Length; i++)
+                    {
+                        // 地形網格掛在錨點下（局部 y 與場景 y 相差原點海拔）：在場景座標中比較
+                        var p = t.TransformPoint(v[i]);
+                        if (p.x < bb.min.x || p.x > bb.max.x || p.z < bb.min.z || p.z > bb.max.z) continue;
+                        if (p.y < b.y - 1.5f || !InPoly(pts, p.x, p.z)) continue;
+                        p.y = b.y - 1.5f;
+                        v[i] = t.InverseTransformPoint(p);
+                        changed = true;
+                    }
+                }
+                if (!changed) continue;
+                mesh.vertices = v;
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                var mc = mf.GetComponent<MeshCollider>();
+                if (mc)
+                {
+                    mc.sharedMesh = null;
+                    mc.sharedMesh = mesh;
+                }
+            }
+        }
+
+        static bool InPoly(Vector2[] ring, float x, float z)
+        {
+            bool hit = false;
+            for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+                if ((ring[i].y > z) != (ring[j].y > z) && x < (ring[j].x - ring[i].x) * (z - ring[i].y) / (ring[j].y - ring[i].y) + ring[i].x) hit = !hit;
+            return hit;
         }
 
         // ---- 目標 --------------------------------------------------------------------------------

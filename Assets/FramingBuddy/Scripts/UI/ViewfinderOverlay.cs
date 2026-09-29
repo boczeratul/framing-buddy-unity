@@ -36,6 +36,7 @@ namespace FramingBuddy
             Element = new VisualElement();
             Element.AddToClassList("overlay");
             Element.style.backgroundColor = new Color(0.02f, 0.02f, 0.03f);
+            Element.style.overflow = Overflow.Hidden;
             Element.generateVisualContent += Draw;
             BindPointer();
         }

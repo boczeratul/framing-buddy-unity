@@ -101,7 +101,7 @@ namespace FramingBuddy
             _attrib.style.bottom = 4;
             _attrib.style.fontSize = 10;
             _attrib.style.color = new Color(1, 1, 1, 0.75f);
-            _attrib.style.maxWidth = 640;
+            _attrib.style.maxWidth = Length.Percent(92);
             _attrib.style.whiteSpace = WhiteSpace.Normal;
             _attrib.style.unityTextAlign = TextAnchor.LowerRight;
             _vfHost.Add(_attrib);
@@ -165,7 +165,7 @@ namespace FramingBuddy
             UpdateHud();
             bool busy = _app.Busy;
             _loading.style.display = busy ? DisplayStyle.Flex : DisplayStyle.None;
-            if (busy) _loading.text = "載入中… " + _app.Status().Replace("\n", " · ");
+            if (busy) _loading.text = "載入中…";
             _attrib.text = _app.Attribution();
         }
 

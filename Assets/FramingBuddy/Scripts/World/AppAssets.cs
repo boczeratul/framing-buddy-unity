@@ -24,6 +24,10 @@ namespace FramingBuddy
         [Header("材質範本（HDRP/Lit）")]
         public Material terrain;
         public Material water;
+        /// <summary>OSM 建物（沒有 Google 時）：窗格立面（4 種色調）與屋頂</summary>
+        public List<Material> facades = new();
+        public Material roof;
+
         /// <summary>地圖 3D 模式的視錐（HDRP/Unlit，透明）</summary>
         public Material gizmo;
 

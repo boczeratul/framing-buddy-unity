@@ -21,6 +21,12 @@ MonoBehaviour:
     prefab: {fileID: 2636478899306548326, guid: cd544ee0b72514f13b4f6d698115ac1c, type: 3}
   terrain: {fileID: 2100000, guid: 2efa762d6bc2d4600aaa72ffc1606f1a, type: 2}
   water: {fileID: 2100000, guid: f0533a8f9118a45d880c8b2f38efe3dd, type: 2}
+  facades:
+  - {fileID: 2100000, guid: 639c0dbf214f449609ee638cefdf8cf2, type: 2}
+  - {fileID: 2100000, guid: 4ac08040d08a0410a91df74544bd1927, type: 2}
+  - {fileID: 2100000, guid: 742b2aa57a23e4a60b5466486f510225, type: 2}
+  - {fileID: 2100000, guid: 5bb8870978ed64a368a0d36882f618bc, type: 2}
+  roof: {fileID: 2100000, guid: 1e0e54998fdf94c4a8d21d31f4f7c7b1, type: 2}
   gizmo: {fileID: 2100000, guid: d111ab384e0d747ec82a61535270d5ea, type: 2}
   nightGlow:
   - {fileID: 2100000, guid: 57ced1852817548f18aa9683b26b09b6, type: 2}
@@ -40,5 +46,9 @@ MonoBehaviour:
   - {fileID: 2100000, guid: 50411bc6d877542829b87b3a0852d3cd, type: 2}
   - {fileID: 2100000, guid: 86fd1c324fb2d4d1884a1f89e1f09329, type: 2}
   - {fileID: 2100000, guid: 84a17969f12e0412fba976034f53ca65, type: 2}
+  - {fileID: 2100000, guid: 639c0dbf214f449609ee638cefdf8cf2, type: 2}
+  - {fileID: 2100000, guid: 4ac08040d08a0410a91df74544bd1927, type: 2}
+  - {fileID: 2100000, guid: 742b2aa57a23e4a60b5466486f510225, type: 2}
+  - {fileID: 2100000, guid: 5bb8870978ed64a368a0d36882f618bc, type: 2}
   styleSheet: {fileID: 7433441132597879392, guid: e2987e69e1ad1434ba8b4c2f6a1fa552, type: 3}
   theme: {fileID: -4733365628477956816, guid: 41419660cfb7b4e008fa7f413cecec0e, type: 3}

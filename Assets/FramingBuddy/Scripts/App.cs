@@ -40,8 +40,10 @@ namespace FramingBuddy
 
         void Awake()
         {
-            QualitySettings.vSyncCount = 1;
-            Application.targetFrameRate = -1;
+            // macOS 的視窗一律經過合成器（不會撕裂）：關掉垂直同步、以 60 fps 為上限，
+            // 避免 GPU 時間略超過一個刷新週期時直接掉到 30 fps
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = 60;
             Application.runInBackground = false;
 
             var initial = new ShotState();
@@ -87,7 +89,7 @@ namespace FramingBuddy
 
         string _shotPath;
         bool _quitAfterShot, _shotTaken;
-        float _shotReadyAt = -1;
+        float _shotReadyAt = -1, _shotDelay = 4;
 
         void ParseTestArgs(string[] args)
         {
@@ -109,20 +111,71 @@ namespace FramingBuddy
             if (date != null) _store.Set(st => st.date = date);
             string q = Arg("-quality");
             if (q != null && Enum.TryParse<Quality>(q, true, out var qq)) _store.Set(st => st.quality = qq);
+            _celestial.DebugSky(Array.IndexOf(args, "-gradientsky") >= 0, Array.IndexOf(args, "-nomoon") >= 0,
+                Array.IndexOf(args, "-novolume") >= 0, Array.IndexOf(args, "-nostars") >= 0);
+            _celestial.DebugSkySpace(Array.IndexOf(args, "-skycamera") >= 0, Array.IndexOf(args, "-noatmo") >= 0);
+            string dis = Arg("-disablecomp");
+            if (dis != null) _celestial.DisableComponents(dis);
+            string fixedEv = Arg("-fixedev");
+            if (fixedEv != null)
+            {
+                _celestial.ForceFixedExposure = float.Parse(fixedEv, Inv);
+                Debug.Log("[test] 固定曝光 EV " + fixedEv);
+                _celestial.Apply(_store.State, AllKeys(), _world.originEle);
+            }
+            _profilePath = Arg("-profile");
+            if (Array.IndexOf(args, "-vsync") >= 0) { QualitySettings.vSyncCount = 1; Application.targetFrameRate = -1; }
+            if (Array.IndexOf(args, "-uncapped") >= 0) Application.targetFrameRate = 300;
+            WaterBodies.NoProbe = Array.IndexOf(args, "-noprobe") >= 0;
+            WaterBodies.Disabled = Array.IndexOf(args, "-nowater") >= 0;
+            if (Array.IndexOf(args, "-notrees") >= 0) _store.Set(st => st.trees = false);
+            string delay = Arg("-shotdelay");
+            if (delay != null) _shotDelay = float.Parse(delay, Inv);
             _shotPath = Arg("-shot");
             _quitAfterShot = Array.IndexOf(args, "-quit") >= 0;
+            // 自動測試時視窗可能不在前景：照常更新
+            if (_shotPath != null) Application.runInBackground = true;
+        }
+
+        float _fpsAvg = 1f / 60f;
+        double _cpuMs, _gpuMs;
+        readonly FrameTiming[] _timings = new FrameTiming[1];
+
+        string _profilePath;
+        int _profileFrames = -1;
+
+        void TickProfile()
+        {
+            if (_profilePath == null || _shotReadyAt < 0 || Time.time < _shotReadyAt - 2) return;
+            if (_profileFrames < 0)
+            {
+                UnityEngine.Profiling.Profiler.logFile = _profilePath;
+                UnityEngine.Profiling.Profiler.enableBinaryLog = true;
+                UnityEngine.Profiling.Profiler.enabled = true;
+                _profileFrames = 0;
+            }
+            else if (++_profileFrames == 90)
+            {
+                UnityEngine.Profiling.Profiler.enabled = false;
+                UnityEngine.Profiling.Profiler.enableBinaryLog = false;
+                Debug.Log("[test] profile saved");
+            }
         }
 
         void TickTestShot()
         {
+            TickProfile();
+            _fpsAvg = Mathf.Lerp(_fpsAvg, Time.unscaledDeltaTime, 0.05f);
+            _cpuMs = _rig.CpuMs;
+            _gpuMs = _rig.GpuMs;
             if (_shotPath == null || _shotTaken) return;
             // 場景載入完成後再等 4 秒（曝光、TAA、雲穩定），最多等 150 秒
-            if (!Busy && _shotReadyAt < 0) _shotReadyAt = Time.time + 4;
+            if (!Busy && _shotReadyAt < 0) _shotReadyAt = Time.time + _shotDelay;
             if ((_shotReadyAt > 0 && Time.time > _shotReadyAt) || Time.time > 150)
             {
                 _shotTaken = true;
                 ScreenCapture.CaptureScreenshot(_shotPath);
-                Debug.Log($"[test] 截圖 {_shotPath}（{Time.time:0.0}s，渲染解析度 {_rig.RenderScale:0}%）\n{Status()}");
+                Debug.Log($"[test] 截圖 {_shotPath}（{Time.time:0.0}s，{1f / Mathf.Max(1e-4f, _fpsAvg):0} fps（CPU {_cpuMs:0.0} ms、GPU {_gpuMs:0.0} ms），渲染解析度 {_rig.RenderScale:0}%）\n{Status()}\n{_celestial.DebugStack(_rig.Cam)}\nApp.Update {_updMs:0.00} ms\nrenderers {FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None).Length}");
                 if (_quitAfterShot) Invoke(nameof(QuitNow), 2f);
             }
         }
@@ -135,9 +188,9 @@ namespace FramingBuddy
         {
             if (panelSettings == null) return;
             panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
-            // Retina：以 DPI 推算（macOS 約 220 dpi → 2 倍）
+            // Retina：以 DPI 推算，對齊 macOS 預設縮放（MacBook Air 約 224 dpi → 1.75 倍）
             float dpi = Screen.dpi > 0 ? Screen.dpi : 110;
-            panelSettings.scale = Mathf.Clamp(Mathf.Round(dpi / 110f * 4) / 4, 1f, 3f);
+            panelSettings.scale = Mathf.Clamp(Mathf.Round(dpi / 128f * 4) / 4, 1f, 3f);
             UiScale.PixelsPerPoint = panelSettings.scale;
         }
 
@@ -176,9 +229,14 @@ namespace FramingBuddy
             }
             _world.ApplySettings(s, changed);
             _celestial.Apply(s, changed, _world.originEle);
-            if (changed.Contains("quality")) _rig.SetQuality(s.quality);
+            if (changed.Contains("quality"))
+            {
+                _rig.SetQuality(s.quality);
+                if (_ui != null) OnFrameChanged();
+            }
             _reportDirty = true;
             _stateDirty = true;
+            _stateDirtyForIdle = true;
         }
 
         // ---- 站立面 ----
@@ -208,8 +266,39 @@ namespace FramingBuddy
 
         // ---- 每幀 ----
 
+        readonly System.Diagnostics.Stopwatch _sw = new();
+        double _updMs;
+
         void Update()
         {
+            _sw.Restart();
+            UpdateInner();
+            _updMs = _updMs * 0.95 + _sw.Elapsed.TotalMilliseconds * 0.05;
+        }
+
+        float _activeUntil;
+
+        /// <summary>閒置時降低影格率：規劃畫面多半靜止，無風扇的 MacBook Air 可保持低溫，操作時立即回到 60 fps</summary>
+        void TickIdle()
+        {
+            var mouse = Mouse.current;
+            var kb = Keyboard.current;
+            bool input = (mouse != null && (mouse.delta.ReadValue().sqrMagnitude > 0 || mouse.scroll.ReadValue().sqrMagnitude > 0 ||
+                                            mouse.leftButton.isPressed || mouse.rightButton.isPressed)) ||
+                         (kb != null && kb.anyKey.isPressed);
+            if (input || _stateDirtyForIdle || _world.version != _idleWorldVersion || _world.rebasing || Busy) _activeUntil = Time.unscaledTime + 1.5f;
+            _stateDirtyForIdle = false;
+            _idleWorldVersion = _world.version;
+            int target = Time.unscaledTime < _activeUntil || _shotPath != null ? 60 : 20;
+            if (Application.targetFrameRate != target && Application.targetFrameRate <= 60) Application.targetFrameRate = target;
+        }
+
+        bool _stateDirtyForIdle;
+        int _idleWorldVersion = -1;
+
+        void UpdateInner()
+        {
+            TickIdle();
             TickKeys();
             TickTestShot();
             var s = _store.State;
@@ -226,6 +315,7 @@ namespace FramingBuddy
             if (_world.version != _lastWorldVersion)
             {
                 _lastWorldVersion = _world.version;
+                _celestial.SetOriginElevation(_world.originEle);
                 _reportDirty = true;
                 _ui.Viewfinder.MarkDirty();
                 _ui.Map.Refresh();
@@ -251,7 +341,6 @@ namespace FramingBuddy
                 _ui.UpdateHud();
                 _ui.Map.Refresh();
             }
-            _ui.Viewfinder.MarkDirty();
             _ui.Viewfinder.Update();
             if (now > _refreshAt)
             {
@@ -273,7 +362,7 @@ namespace FramingBuddy
         void OnFrameChanged()
         {
             var r = _ui.FrameRect;
-            float k = UiScale.PixelsPerPoint;
+            float k = UiScale.PixelsPerPoint * _rig.PixelFactor;
             _rig.SetSize(Mathf.RoundToInt(r.width * k), Mathf.RoundToInt(r.height * k));
         }
 
@@ -289,6 +378,12 @@ namespace FramingBuddy
                 string clip = GUIUtility.systemCopyBuffer;
                 var probe = _store.State.Clone();
                 if (ShareLink.TryDecode(clip, probe)) _store.Set(st => ShareLink.TryDecode(clip, st));
+                return;
+            }
+            // Cmd+Ctrl+F：切換全螢幕／視窗
+            if (cmd && kb.fKey.wasPressedThisFrame && (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed))
+            {
+                Screen.fullScreenMode = Screen.fullScreenMode == FullScreenMode.Windowed ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
                 return;
             }
             if (cmd && kb.cKey.wasPressedThisFrame)
@@ -449,6 +544,7 @@ namespace FramingBuddy
             get
             {
                 if (_world.rebasing || !_world.terrainReady) return true;
+                if (!_world.GoogleActive && _world.Osm.Loading > 0) return true;
                 return _world.GoogleActive && _world.tileset != null && _world.tileset.ComputeLoadProgress() < 99f;
             }
         }
@@ -464,6 +560,13 @@ namespace FramingBuddy
             else if (!s.photoreal) parts.Add("Google 實景 3D：關閉");
             else if (_world.googleFailed) parts.Add($"Google 實景 3D 無法使用（{_world.googleError}）");
             else if (_world.tileset != null) parts.Add($"Google 實景 3D：{_world.tileset.ComputeLoadProgress():0}%");
+            if (!_world.GoogleActive)
+            {
+                var n = _world.Osm.NearStats;
+                var f = _world.Osm.FarStats;
+                parts.Add($"OSM 建物：近景 {n.built}/{n.wanted}、遠景高樓 {f.built}/{f.wanted} 區塊" +
+                          (_world.Osm.Loading > 0 ? $"（下載中 {_world.Osm.Loading}）" : "") + (_world.Osm.errors > 0 ? $"，失敗 {_world.Osm.errors} 次" : ""));
+            }
             var m = _world.MountainNames.ToList();
             if (m.Count > 0) parts.Add("遠山精細模型：" + string.Join("、", m));
             parts.Add($"渲染解析度 {_rig.RenderScale:0}%（STP 上採樣）");
