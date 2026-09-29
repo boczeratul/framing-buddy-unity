@@ -23,8 +23,9 @@ namespace FramingBuddy
 
         VisualElement _vfHost;
         readonly VisualElement[] _bars = new VisualElement[4];
+        VisualElement _loadingPill, _hudTargetRow;
         Label _loading, _attrib, _hudTarget, _mapHint;
-        readonly List<Label> _hud = new();
+        readonly List<(VisualElement tile, Label value)> _hud = new();
         ScrollView _scroll;
         VisualElement _activeSlider;
         string _frameKey = "";
@@ -52,10 +53,15 @@ namespace FramingBuddy
 
             var brand = new VisualElement();
             brand.AddToClassList("brand");
+            var brandLeft = Cls(new VisualElement(), "brand-left");
+            var logo = Cls(new VisualElement(), "logo");
+            logo.Add(Cls(new VisualElement(), "logo-ring"));
+            brandLeft.Add(logo);
             var titles = new VisualElement();
             titles.Add(Cls(new Label("Framing Buddy"), "brand-title"));
             titles.Add(Cls(new Label("拍攝角度・光線・焦段規劃"), "brand-sub"));
-            brand.Add(titles);
+            brandLeft.Add(titles);
+            brand.Add(brandLeft);
             aside.Add(brand);
 
             Map = new MapPanel(store, app, orbit);
@@ -91,34 +97,40 @@ namespace FramingBuddy
             }
             Viewfinder = new ViewfinderOverlay(store, app);
             _vfHost.Add(Viewfinder.Element);
-            _loading = Cls(new Label("載入中…"), "loading");
+            _loadingPill = Cls(new VisualElement(), "loading");
+            _loadingPill.pickingMode = PickingMode.Ignore;
+            var dot = Cls(new VisualElement(), "loading-dot");
+            dot.pickingMode = PickingMode.Ignore;
+            _loadingPill.Add(dot);
+            _loading = Cls(new Label("載入中…"), "loading-text");
             _loading.pickingMode = PickingMode.Ignore;
-            _vfHost.Add(_loading);
-            _attrib = new Label();
+            _loadingPill.Add(_loading);
+            _vfHost.Add(_loadingPill);
+            // 載入中指示點：明暗交替（由 USS transition 補間）
+            dot.schedule.Execute(() => dot.ToggleInClassList("dim")).Every(500);
+            _attrib = Cls(new Label(), "vf-attrib");
             _attrib.pickingMode = PickingMode.Ignore;
-            _attrib.style.position = Position.Absolute;
-            _attrib.style.right = 8;
-            _attrib.style.bottom = 4;
-            _attrib.style.fontSize = 10;
-            _attrib.style.color = new Color(1, 1, 1, 0.75f);
-            _attrib.style.maxWidth = Length.Percent(92);
-            _attrib.style.whiteSpace = WhiteSpace.Normal;
-            _attrib.style.unityTextAlign = TextAnchor.LowerRight;
             _vfHost.Add(_attrib);
             _vfHost.RegisterCallback<GeometryChangedEvent>(_ => LayoutFrame());
 
             var hud = Cls(new VisualElement(), "hud");
             var main = Cls(new VisualElement(), "hud-main");
-            for (int i = 0; i < 10; i++)
+            foreach (var cap in HudCaptions)
             {
-                var l = new Label();
-                if (i == 0) l.AddToClassList("hud-big");
-                _hud.Add(l);
-                main.Add(l);
+                var tile = Cls(new VisualElement(), "stat");
+                if (_hud.Count == 0) tile.AddToClassList("stat-big");
+                tile.Add(Cls(new Label(cap), "stat-cap"));
+                var val = Cls(new Label(), "stat-val");
+                tile.Add(val);
+                _hud.Add((tile, val));
+                main.Add(tile);
             }
             hud.Add(main);
-            _hudTarget = Cls(new Label(), "hud-target");
-            hud.Add(_hudTarget);
+            _hudTargetRow = Cls(new VisualElement(), "hud-target");
+            _hudTargetRow.Add(Cls(new VisualElement(), "hud-target-dot"));
+            _hudTarget = Cls(new Label(), "hud-target-text");
+            _hudTargetRow.Add(_hudTarget);
+            hud.Add(_hudTargetRow);
             result.Add(hud);
 
             // 拖曳滑桿時不要被狀態同步打斷
@@ -164,7 +176,7 @@ namespace FramingBuddy
             foreach (var f in _syncs) f(_store.State);
             UpdateHud();
             bool busy = _app.Busy;
-            _loading.style.display = busy ? DisplayStyle.Flex : DisplayStyle.None;
+            _loadingPill.style.display = busy ? DisplayStyle.Flex : DisplayStyle.None;
             if (busy) _loading.text = "載入中…";
             _attrib.text = _app.Attribution();
         }
@@ -212,6 +224,8 @@ namespace FramingBuddy
 
         // ---- 資訊列 ----
 
+        static readonly string[] HudCaptions = { "鏡頭", "畫幅", "視角", "方位", "俯仰", "鏡頭海拔", "當地時間", "太陽 方位／仰角", "測光" };
+
         public void UpdateHud()
         {
             var s = _store.State;
@@ -219,23 +233,25 @@ namespace FramingBuddy
             var info = _app.Celestial;
             var eye = _app.Eye;
             var utc = TimeUtil.ZonedToUtc(s.date, s.minutes, s.tz);
+            string meter = _app.MeterText ?? "";
+            if (meter.StartsWith("測光：", StringComparison.Ordinal)) meter = meter.Substring(3);
             string[] items =
             {
-                $"{Mathf.Round(s.focal)}<size=12>mm</size> <size=13>f/{F(s.aperture, s.aperture < 10 ? 1 : 0)}</size>",
+                $"{Mathf.Round(s.focal)}<size=13>mm</size>  <size=14>f/{F(s.aperture, s.aperture < 10 ? 1 : 0)}</size>",
                 $"{Lens.AspectText(s.aspect, s.portrait)} {(s.portrait ? "直幅" : "橫幅")}",
-                $"視角 {F(fov.h)}° × {F(fov.v)}°",
-                $"方位 {F(s.azimuth)}° {Geo.CompassName(s.azimuth)}",
-                $"俯仰 {(s.pitch >= 0 ? "+" : "")}{F(s.pitch)}°",
-                $"鏡頭 海拔 {F(eye.y + _app.OriginElevation)} m",
+                $"{F(fov.h)}° × {F(fov.v)}°",
+                $"{F(s.azimuth)}° {Geo.CompassName(s.azimuth)}",
+                $"{(s.pitch >= 0 ? "+" : "")}{F(s.pitch)}°",
+                $"{F(eye.y + _app.OriginElevation)} m",
                 $"{s.date} {TimeUtil.FormatMinutes(s.minutes)}（{TimeUtil.OffsetLabel(s.tz, utc)}）",
-                info != null ? $"☀ {F(info.sunAz, 0)}° / {F(info.sunAlt)}°" : "",
-                _app.MeterText,
-                "",
+                info != null ? $"{F(info.sunAz, 0)}° / {F(info.sunAlt)}°" : "",
+                meter,
             };
             for (int i = 0; i < _hud.Count; i++)
             {
-                _hud[i].text = items[i];
-                _hud[i].style.display = string.IsNullOrEmpty(items[i]) ? DisplayStyle.None : DisplayStyle.Flex;
+                var (tile, val) = _hud[i];
+                val.text = items[i];
+                tile.style.display = string.IsNullOrEmpty(items[i]) ? DisplayStyle.None : DisplayStyle.Flex;
             }
 
             var rep = _app.Report;
@@ -262,7 +278,7 @@ namespace FramingBuddy
                 line = $"<b>{t.label}</b> 距離 {dist} ・ 方位 {F(b)}° ・ {status}{frac}";
             }
             _hudTarget.text = line;
-            _hudTarget.EnableInClassList("ok", ok);
+            _hudTargetRow.EnableInClassList("ok", ok);
         }
 
         // ---- 面板元件 ----
@@ -300,7 +316,8 @@ namespace FramingBuddy
             var ctl = Cls(new VisualElement(), "ctl");
             var row = Cls(new VisualElement(), "row");
             row.Add(Cls(new Label(label), "lab"));
-            var slider = new Slider(o.min, o.max);
+            // 只有非負值的滑桿顯示填色軌（正負對稱的如東西、俯仰則不填）
+            var slider = new Slider(o.min, o.max) { fill = o.min >= 0 };
             row.Add(slider);
             var num = Cls(new TextField { isDelayed = true }, "num");
             row.Add(num);
@@ -389,8 +406,7 @@ namespace FramingBuddy
         void BuildPosition()
         {
             var sec = Section("位置");
-            var presetBtn = new Button { text = "快速位置…" };
-            presetBtn.style.marginTop = 4;
+            var presetBtn = Cls(new Button { text = "快速位置…" }, "preset");
             presetBtn.clicked += () =>
             {
                 var menu = new GenericDropdownMenu();
@@ -418,7 +434,7 @@ namespace FramingBuddy
             void GoCoord()
             {
                 bool okp = Geo.TryParse(coord.value, out var p);
-                coord.style.borderBottomColor = okp ? StyleKeyword.Null : new StyleColor(new Color(1, 0.4f, 0.3f));
+                coord.EnableInClassList("invalid", !okp);
                 if (okp) _app.GoTo(p);
             }
             go.clicked += GoCoord;
@@ -619,8 +635,6 @@ namespace FramingBuddy
                 var (d, m) = TimeUtil.Now(_store.State.tz);
                 _store.Set(s => { s.date = d; s.minutes = m; });
             }) { text = "現在" };
-            prev.style.marginRight = 4;
-            next.style.marginRight = 4;
             row.Add(prev);
             row.Add(next);
             row.Add(now);
@@ -630,7 +644,7 @@ namespace FramingBuddy
                 var ctl = Cls(new VisualElement(), "ctl");
                 var r = Cls(new VisualElement(), "row");
                 r.Add(Cls(new Label("時間"), "lab"));
-                var slider = new Slider(0, 1439);
+                var slider = new Slider(0, 1439) { fill = true };
                 var time = Cls(new TextField { isDelayed = true }, "num");
                 r.Add(slider);
                 r.Add(time);

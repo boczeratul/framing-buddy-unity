@@ -28,6 +28,14 @@ namespace FramingBuddy
             get
             {
                 if (_ui != null) return _ui;
+                // 優先使用 macOS 現代介面字型「蘋方」（依名稱向系統查詢；找不到時退回下列字型檔）
+                _ui = FontAsset.CreateFontAsset("PingFang TC", "Regular");
+                if (_ui != null)
+                {
+                    _ui.isMultiAtlasTexturesEnabled = true;
+                    Debug.Log("[ui] 字型：PingFang TC");
+                    return _ui;
+                }
                 foreach (var (path, face) in Candidates)
                 {
                     if (!File.Exists(path)) continue;
@@ -38,7 +46,6 @@ namespace FramingBuddy
                         break;
                     }
                 }
-                if (_ui == null) _ui = FontAsset.CreateFontAsset("PingFang TC", "Regular");
                 return _ui;
             }
         }
